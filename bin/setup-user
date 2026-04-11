@@ -1,0 +1,125 @@
+#!/bin/bash
+# setup-user — provision a workshop attendee account on hop + host1 + host2.
+#
+# Run as `admin` on the hop node:
+#
+#   setup-user <username> "Full Name" <email>
+#
+# Creates the user on all three boxes with a shared workshop password,
+# passwordless sudo, and a baseline ~/.gitconfig.  Idempotent: safe to
+# re-run if you tweak the name/email.
+#
+# Identity model: attendees never have an SSH key on the workshop boxes.
+# They use SSH agent forwarding (`ssh -A`) so git on the host signs
+# pushes with the key on their laptop.
+
+set -euo pipefail
+
+WORKSHOP_PASSWORD="welcome2026"
+HOSTS=(localhost host1 host2)
+
+usage() {
+    cat >&2 <<EOF
+Usage: setup-user <username> "Full Name" <email>
+
+  username   lowercase letters/digits/_-, max 31 chars, must start with a letter
+  Full Name  shown in git commits (quote it)
+  email      shown in git commits
+
+Example:
+  setup-user alice "Alice Example" alice@example.com
+EOF
+    exit 2
+}
+
+die() {
+    echo "setup-user: $*" >&2
+    exit 1
+}
+
+# Refuse to run as root: this script invokes sudo on remote hosts via the
+# admin user's passwordless sudo grant.  Running it as root locally would
+# bypass that path and fall over on the remote ssh hop.
+[[ $EUID -eq 0 ]] && die "do not run as root; run as 'admin' on the hop node"
+
+[[ $# -eq 3 ]] || usage
+USERNAME="$1"
+FULLNAME="$2"
+EMAIL="$3"
+
+# Username sanity: a real /etc/passwd entry, not a stray quote or '../'.
+[[ "$USERNAME" =~ ^[a-z][a-z0-9_-]{0,30}$ ]] || die \
+    "invalid username '$USERNAME': must match ^[a-z][a-z0-9_-]{0,30}\$"
+
+# Email sanity: not bulletproof, just enough to catch obvious typos.
+[[ "$EMAIL" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]] || die \
+    "invalid email '$EMAIL'"
+
+# Build the per-host provisioning script once and pipe it to bash on each
+# target.  Heredoc-quoted so $USERNAME etc. are expanded HERE, not on the
+# remote -- the remote shell sees concrete values, no interpolation games.
+read -r -d '' REMOTE_SCRIPT <<EOF || true
+set -e
+
+# Create the user (idempotent: -m makes the home dir, || true so re-runs
+# don't fail when it already exists).
+if ! id "$USERNAME" >/dev/null 2>&1; then
+    sudo useradd -m -G wheel -s /bin/bash "$USERNAME"
+fi
+
+# (Re)set the password every run so a forgotten password is one re-invoke
+# away, and so the workshop password rotates cleanly when this script is
+# updated.
+echo "$USERNAME:$WORKSHOP_PASSWORD" | sudo chpasswd
+
+# Passwordless sudo via a per-user drop-in so cleanup is just an unlink.
+echo "$USERNAME ALL=(ALL) NOPASSWD: ALL" | \
+    sudo tee /etc/sudoers.d/"$USERNAME" >/dev/null
+sudo chmod 440 /etc/sudoers.d/"$USERNAME"
+
+# Baseline git identity so commits attribute to the right human.
+sudo -u "$USERNAME" git config --global user.name "$FULLNAME"
+sudo -u "$USERNAME" git config --global user.email "$EMAIL"
+
+# Allow agent forwarding to land on the user's account: ssh-agent socket
+# perms come from systemd, nothing to set up here -- but make sure the
+# user's ~/.ssh exists with the right mode so an interactive ssh later
+# doesn't trip on a missing dir.
+sudo -u "$USERNAME" mkdir -p ~"$USERNAME"/.ssh
+sudo -u "$USERNAME" chmod 700 ~"$USERNAME"/.ssh
+EOF
+
+provision_one() {
+    local host="$1"
+    if [[ "$host" == "localhost" ]]; then
+        bash -c "$REMOTE_SCRIPT"
+    else
+        # ssh non-interactively; admin->{host1,host2} is keyed already.
+        ssh -o BatchMode=yes -o StrictHostKeyChecking=no \
+            "admin@$host" "$REMOTE_SCRIPT"
+    fi
+}
+
+for host in "${HOSTS[@]}"; do
+    echo "==> Provisioning $USERNAME on $host..."
+    if ! provision_one "$host"; then
+        die "failed to provision $USERNAME on $host (see error above)"
+    fi
+done
+
+cat <<EOF
+
+Account ready: $USERNAME on hop, host1, host2
+Password:      $WORKSHOP_PASSWORD
+Identity:      $FULLNAME <$EMAIL>
+
+Login from your laptop:
+  ssh -A $USERNAME@devday.mulberrytree.us
+
+From the hop, jump to a workshop host:
+  ssh -A host1   # or host2
+
+Or skip the hop with ProxyJump:
+  ssh -A -J $USERNAME@devday.mulberrytree.us $USERNAME@host1
+
+EOF
