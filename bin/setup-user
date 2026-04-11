@@ -107,10 +107,17 @@ fi
 
 if [[ -z "${ASSIGNED_HOST:-}" ]]; then
     # Count current assignments per host, pick the lightest.
+    #
+    # The glob below MUST be unquoted so the shell expands it.  When
+    # the directory is empty (first run), the glob expands to itself
+    # ("*" literal) and grep returns rc=2 on the missing file -- the
+    # `|| true` swallows that.  grep also returns rc=1 when the regex
+    # doesn't match anything in existing files; same fix.
     least_count=999999
     least_host=""
     for h in "${WORKSHOP_HOSTS[@]}"; do
-        count=$(grep -lFx "$h" "$ASSIGNMENT_DIR"/* 2>/dev/null | wc -l)
+        # shellcheck disable=SC2086
+        count=$(grep -lFx "$h" $ASSIGNMENT_DIR/* 2>/dev/null | wc -l || true)
         if (( count < least_count )); then
             least_count=$count
             least_host=$h
