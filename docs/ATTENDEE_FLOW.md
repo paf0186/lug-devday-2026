@@ -7,8 +7,9 @@ patch from a workshop host."
 
 You need:
 
-1. **An SSH key on your laptop** (for git, not for logging into the
-   workshop).  If `~/.ssh/id_ed25519` already exists, skip this:
+1. **An SSH key on your laptop** (for git, and optionally for logging
+   into the workshop hosts).  If `~/.ssh/id_ed25519` already exists,
+   skip this:
 
    ```sh
    ssh-keygen -t ed25519 -C "you@example.com"
@@ -32,46 +33,94 @@ You need:
    *Settings → SSH Keys*.  Paste the contents of `~/.ssh/id_ed25519.pub`
    (the `.pub` file, never the private one).
 
-4. **Pick a Linux username** to use on the workshop boxes.  Lowercase
-   letters/digits/`_-`, must start with a letter, max 31 chars.  Tell
-   the workshop organizer your username, full name, and email at the
-   start of the day so they can create your account.
+4. **Pick a Linux username** to use on the workshop boxes — lowercase
+   letters/digits/`_-`, must start with a letter, max 31 chars.  You
+   create the account yourself on the day, no organizer involvement.
 
-## Day of: first login
+5. **(Optional but recommended) VSCode + the Remote-SSH extension** if
+   you want to edit Lustre source on the workshop host from your laptop.
 
-Once your account has been provisioned, log in from your laptop with
-agent forwarding (`-A`):
+## Day of: bootstrap your account
 
-```sh
-ssh -A <username>@devday.mulberrytree.us
-# password: welcome2026
-```
+The workshop has two hosts, `host1` and `host2`, both directly reachable
+from the public internet.  You'll create your account on both at once.
 
-You're now on the **hop** node.  From here you can reach the two
-workshop hosts:
+Step 1 — ssh in as the shared admin user with the workshop passphrase
+(`blew-hurry-throughout-rate`, also on the slide):
 
 ```sh
-ssh -A host1   # or host2
-# password: welcome2026
+ssh admin@host1.mulberrytree.us
+# password: blew-hurry-throughout-rate
 ```
 
-Or skip the manual two-step with ProxyJump:
+Step 2 — run `create-account` with your chosen username, full name, and
+email.  It will prompt you to paste your SSH public key (or skip and use
+password auth):
 
 ```sh
-ssh -A -J <username>@devday.mulberrytree.us <username>@host1
+admin@host1$ create-account alice "Alice Example" alice@example.com
+
+Paste your SSH public key — the contents of ~/.ssh/id_ed25519.pub
+from your laptop (the file ending in '.pub', not the private key).
+Press Enter on a blank line to skip and use password auth instead.
+key> ssh-ed25519 AAAAC3Nz...K3l alice@laptop
+
+==> Provisioning alice on host1... done
+==> Provisioning alice on host2... done
+
+Account ready: alice
+...
 ```
 
-## Verify agent forwarding works
+The script creates your account on **both** hosts (so failover is just
+"switch the hostname"), drops your pubkey into `~/.ssh/authorized_keys`,
+sets up your gitconfig, and gives you passwordless sudo.
 
-On the workshop host, after `ssh -A`'ing in:
+Step 3 — log out and ssh back in as yourself:
 
 ```sh
-ssh-add -l
+admin@host1$ exit
+$ ssh alice@host1.mulberrytree.us
+[alice@host1 ~]$
 ```
 
-You should see your key fingerprint.  If you see *"Could not open a
-connection to your authentication agent"*, the `-A` flag was missing
-on one of the hops -- log out and try again.
+If you pasted a pubkey, this login uses key auth (no password).  If you
+skipped, you'll be prompted for the same workshop passphrase.
+
+### Where the SSH key lives
+
+To be very clear: your **private** key never leaves your laptop.  When
+`create-account` asks for your "public key," it wants the contents of
+the file ending in `.pub` — typically `~/.ssh/id_ed25519.pub`.  If you
+accidentally try to paste your private key, the script will refuse and
+tell you to paste the `.pub` file instead.
+
+### Forgot the passphrase, or want to rotate your SSH key
+
+Re-run `create-account` with `--force-password`:
+
+```sh
+ssh admin@host1.mulberrytree.us
+admin@host1$ create-account --force-password alice "Alice Example" alice@example.com
+```
+
+This resets the password back to the workshop passphrase, replaces your
+authorized_keys with whatever pubkey you paste, and updates your
+gitconfig.  It's the recovery path for any "I locked myself out"
+situation.
+
+## VSCode Remote-SSH
+
+Once your account exists, in VSCode:
+
+1. *View → Command Palette → Remote-SSH: Connect to Host...*
+2. Type `alice@host1.mulberrytree.us` (substitute your username)
+3. Pick the platform (Linux), authenticate (key or passphrase)
+4. *File → Open Folder* — `/home/alice` is your home
+
+No `~/.ssh/config` editing required.  If you want a friendlier alias for
+later sessions, you *can* add one to `~/.ssh/config` on your laptop, but
+it's not necessary.
 
 ## Cloning Lustre and pushing a patch
 
@@ -85,9 +134,15 @@ git commit -s         # signed-off-by, gerrit requires it
 git push gerrit HEAD:refs/for/master
 ```
 
-Because your SSH agent is forwarded, the `git push` to gerrit uses the
-key on **your laptop**, not anything on the workshop host.  No private
-key ever lands on the boxes.
+Because your SSH agent is forwarded (`ssh -A` if you used the CLI;
+VSCode does this automatically), the `git push` to gerrit uses the key
+on **your laptop**, not anything on the workshop host.  No private key
+ever lands on the boxes.
+
+If you logged in *without* `-A`, agent forwarding isn't on and `git
+push gerrit` will fail with "Permission denied (publickey)."  Log out,
+re-login with `ssh -A alice@host1.mulberrytree.us`, and verify with
+`ssh-add -l`.
 
 ## Doing actual workshop work
 
@@ -102,40 +157,51 @@ sudo ltvm deploy co1-test --build ~/lustre-release --mount
 sudo ltvm exec co1-test 'lctl dl'
 ```
 
-See the `ltvm` help (`ltvm --help`, `ltvm <subcommand> --help`) and
-the [main ltvm repo](https://github.com/lustre-tools/lustre-test-vms)
-for details.
+`ltvm list` shows everyone's VMs on the host along with who created
+each one, so it's easy to spot whose VM is hung when the room is
+debugging.  See `ltvm --help` and `ltvm <subcommand> --help` for
+details, and the [main ltvm
+repo](https://github.com/lustre-tools/lustre-test-vms) for the full
+story.
 
-## Identity model -- why this works the way it does
+## Identity model — why this works the way it does
 
 You have **three identities** in this setup:
 
-| Identity                 | Where it lives           | Used for                          |
-|--------------------------|--------------------------|-----------------------------------|
-| Workshop password        | `/etc/shadow` on the boxes| ssh login (laptop -> hop -> host) |
-| `~/.gitconfig` name+email| Workshop host home dir   | git commit attribution            |
-| SSH private key          | Your laptop only         | git push to gerrit                |
+| Identity                  | Where it lives             | Used for                          |
+|---------------------------|----------------------------|-----------------------------------|
+| Workshop passphrase       | `/etc/shadow` on the hosts | ssh login (laptop → host)         |
+| `~/.gitconfig` name+email | Workshop host home dir     | git commit attribution to gerrit  |
+| SSH private key           | Your laptop only           | git push to gerrit                |
 
-The workshop password is shared and written on a slide.  It only
-protects an internal-only network with no real attack surface, and
-"type one word" beats "find the right key file" every time.
+The workshop passphrase is shared and printed on a slide.  It only
+protects a short-lived test lab on a small known network — "type one
+phrase" beats "find the right key file" every time.  If you paste your
+pubkey during account creation, you skip even that for normal logins.
 
-The SSH key never leaves your laptop.  Agent forwarding lets git on
-the host borrow your laptop's key for the duration of an ssh session,
-then drops the borrowing the moment you log out.  This means a
-compromised workshop host can't impersonate you to gerrit -- worst
-case, an attacker could hijack a live session, but nothing persists.
+The SSH key never leaves your laptop.  Agent forwarding lets git on the
+host borrow your laptop's key for the duration of an ssh session, then
+drops the borrowing the moment you log out.  A compromised workshop
+host can't impersonate you to gerrit — worst case, an attacker could
+hijack a live session, but nothing persists.
 
 ## Troubleshooting
 
-- **`ssh-add -l` says "no identities"** -- run `ssh-add ~/.ssh/id_ed25519`
+- **`ssh-add -l` says "no identities"** — run `ssh-add ~/.ssh/id_ed25519`
   on your laptop, then log back in with `-A`.
-- **`git push` to gerrit says "Permission denied (publickey)"** -- your
+- **`git push` to gerrit says "Permission denied (publickey)"** — your
   agent forwarding isn't reaching the host.  Verify `ssh-add -l` on the
   host shows your key.  If it does, check that gerrit knows your public
-  key (Settings -> SSH Keys at <https://review.whamcloud.com>).
-- **Forgot your workshop password** -- it's `welcome2026`, same on every
-  box, same for every attendee.  If `setup-user` was re-run for you,
-  the password is reset to this value automatically.
-- **Need a fresh start** -- ask the organizer to re-run `setup-user` for
-  your username.  It's idempotent and resets your password + git config.
+  key (Settings → SSH Keys at <https://review.whamcloud.com>).
+- **Forgot the workshop passphrase** — it's on the workshop slide.  If
+  you locked yourself out of your *user account* (somehow rotated the
+  password locally), have an organizer run `create-account
+  --force-password` for you.
+- **`create-account` says "<username> already exists"** — either pick a
+  different username, or re-run with `--force-password` if it's actually
+  your account and you want to reset it.
+- **Pasted the wrong key into `create-account`** — re-run with
+  `--force-password`; the new pubkey replaces the old one.
+- **host1 is unreachable / unresponsive** — try `host2.mulberrytree.us`.
+  Your account exists on both hosts, so failover is just changing the
+  hostname.  If both are down, ask an organizer.
