@@ -78,8 +78,15 @@ echo "$USERNAME ALL=(ALL) NOPASSWD: ALL" | \
 sudo chmod 440 /etc/sudoers.d/"$USERNAME"
 
 # Baseline git identity so commits attribute to the right human.
-sudo -u "$USERNAME" git config --global user.name "$FULLNAME"
-sudo -u "$USERNAME" git config --global user.email "$EMAIL"
+#
+# Run from / so git doesn't pick up a containing repo from the cwd.
+# When the script is invoked from a working dir with restrictive perms
+# (e.g. ~admin/lug-devday-2026 with mode 700), git aborts with
+# "fatal: failed to stat ..." before it gets a chance to look at
+# --global at all.  --global writes to \$HOME/.gitconfig which is
+# unaffected by cwd, but git still inspects cwd at startup.
+sudo -u "$USERNAME" -i git config --global user.name "$FULLNAME"
+sudo -u "$USERNAME" -i git config --global user.email "$EMAIL"
 
 # Allow agent forwarding to land on the user's account: ssh-agent socket
 # perms come from systemd, nothing to set up here -- but make sure the
