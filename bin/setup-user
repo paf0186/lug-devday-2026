@@ -85,8 +85,15 @@ sudo -u "$USERNAME" git config --global user.email "$EMAIL"
 # perms come from systemd, nothing to set up here -- but make sure the
 # user's ~/.ssh exists with the right mode so an interactive ssh later
 # doesn't trip on a missing dir.
-sudo -u "$USERNAME" mkdir -p ~"$USERNAME"/.ssh
-sudo -u "$USERNAME" chmod 700 ~"$USERNAME"/.ssh
+#
+# Resolve the home dir from getent rather than ~tilde expansion: bash
+# evaluates ~user against the NSS user database in the *parent* shell
+# at parse time, before useradd has a chance to land in passwd, and
+# sudo -u doesn't re-run tilde expansion against the target user.
+# getent passwd is the unambiguous source of truth.
+user_home=\$(getent passwd "$USERNAME" | cut -d: -f6)
+[ -n "\$user_home" ] || { echo "could not resolve home dir for $USERNAME" >&2; exit 1; }
+sudo install -d -o "$USERNAME" -g "$USERNAME" -m 700 "\$user_home/.ssh"
 EOF
 
 provision_one() {
