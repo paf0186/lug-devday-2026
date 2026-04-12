@@ -4,39 +4,44 @@ GCP project: `ltvm-workshop-playground` (us-central1-a)
 
 ## VMs
 
-| Name  | Role            | Type           | vCPU | RAM     | Disk   | Public IP             |
-|-------|-----------------|----------------|------|---------|--------|-----------------------|
-| host1 | workshop host A | n2-standard-32 | 32   | 128 GiB | 256 GB | reserved IP #1 (live) |
-| host2 | workshop host B | n2-standard-32 | 32   | 128 GiB | 256 GB | reserved IP #2 (live) |
-| —     | (spare)         | —              | —    | —       | —      | reserved IP #3        |
-| —     | (spare)         | —              | —    | —       | —      | reserved IP #4        |
+| Name  | Role               | Type           | vCPU | RAM     | Disk   | Public IP             |
+|-------|--------------------|----------------|------|---------|--------|-----------------------|
+| host1 | live workshop host | n2-standard-64 | 64   | 256 GiB | 512 GB | reserved IP #1 (live) |
+| —     | cold spare         | —              | —    | —       | —      | reserved IP #2        |
 
-Hosts have nested virt enabled and live in the same `us-central1-a` VPC
-subnet, so they share a private network and reach each other at internal
-IPs without egress through the public internet.  `create-account` depends
-on this — `admin@host1` ssh's directly to `admin@host2` over the private
-network to mirror new accounts onto the second host.
+One mongo host instead of a pair.  The microVM bridge network is
+host-local (see the CLAUDE.md note in `lustre-test-vms-v2` about
+`fcbr0` / `192.168.100.0/24`), so splitting the workshop across two
+hosts would break any exercise that wanted a multi-node Lustre cluster
+spanning both machines — not worth the failover story for the room
+size we expect.
 
-DNS (manually maintained, all four point at the corresponding reserved IP):
-- `devday1.mulberrytree.us` → `34.61.47.200`   (`devday-host1`)
-- `devday2.mulberrytree.us` → `35.232.23.141`  (`devday-host2`)
-- `devday3.mulberrytree.us` → `35.224.134.233` (`devday-host3`)
-- `devday4.mulberrytree.us` → `34.171.126.149` (`devday-host4`)
+Nested virt is enabled, and the host lives in `us-central1-a` in the
+default VPC subnet.
 
-Four IPs are pre-reserved and pre-DNSed so failover is "attach a spare IP
-to a fresh VM" with zero DNS propagation wait.  At workshop time only two
-VMs exist.  If host1 dies on the day, you have two options:
-1. Detach IP #1 from the dead VM, attach to a fresh VM — attendees keep
-   using `devday1.mulberrytree.us`, no rename.
-2. Spin up a fresh VM with IP #3 attached — tell the room "host1 is dead,
-   switch to host3."  Faster, but renames break in-flight ssh sessions.
+DNS (manually maintained, both names point at the corresponding reserved IP):
+- `devday1.mulberrytree.us` → `34.61.47.200`  (`devday-host1`, live)
+- `devday2.mulberrytree.us` → `35.232.23.141` (`devday-host2`, cold spare — no VM attached)
 
-Capacity: 28 microVMs/host × 2 = 56.  Realistic peak: 10 attendees × 4 VMs = 40.
+The second IP is pre-DNSed so failover is "spin up a fresh VM, attach
+the spare IP" with zero DNS propagation wait.  Recovery story if `host1`
+dies mid-workshop:
+
+1. **If you have a recent snapshot** (see `devday-bgd`): create a new
+   VM from the snapshot, attach reserved IP #2 — attendees switch from
+   `devday1` to `devday2`.  ~5-10 min.
+2. **No snapshot**: create a stock VM, run through the hand-configure
+   punchlist again.  ~1-2 hours, a mid-workshop disaster.  Take the
+   snapshot.
+
+Capacity: ~56 microVMs on one n2-standard-64, roughly the same ceiling
+as the old two-host pair (28/host × 2).  Realistic peak: 10 attendees ×
+4 VMs = 40.
 
 ## Auth
 
-Password-only SSH on the public endpoints, with self-service SSH keys via
-`/usr/local/bin/create-account` on first login (sourced from
+Password-only SSH on the public endpoint, with self-service SSH keys
+via `/usr/local/bin/create-account` on first login (sourced from
 [bin/create-account](bin/create-account) and baked into the host image).
 
 - **Shared admin** (used once per attendee, to bootstrap their account):
@@ -44,66 +49,65 @@ Password-only SSH on the public endpoints, with self-service SSH keys via
 - **Per-attendee** (used for everything else): `ssh <username>@devday1.mulberrytree.us` —
   same passphrase, or key auth if they pasted a pubkey during account
   creation
-- **MicroVMs** (from a host): `ssh root@<vm-name>` — managed by `ltvm`
+- **MicroVMs** (from the host): `ssh root@<vm-name>` — managed by `ltvm`
 
-The workshop passphrase (`blew-hurry-throughout-rate`) lives on each host at
-`/etc/lab-passphrase` (root, mode 600), baked into the host image.  Rotate
-by editing the file and re-snapshotting.
+The workshop passphrase (`blew-hurry-throughout-rate`) lives on the host
+at `/etc/lab-passphrase` (root, mode 600), baked into the host image.
+Rotate by editing the file and re-snapshotting.
 
-`admin` and every attendee account have passwordless sudo (ltvm needs root
-for VM lifecycle, bridge config, mounts).
-
-host1 ↔ host2 are passwordless via a shared admin SSH key baked into the
-host image, so `create-account` can mirror an account onto both hosts in
-a single attendee invocation.
+`admin` and every attendee account have passwordless sudo (ltvm needs
+root for VM lifecycle, bridge config, mounts).
 
 ## Cost
 
-Workshop is ephemeral: spin up before, tear down after.
+Workshop is ephemeral: spin up before, tear down after.  All numbers
+approximate — verify on <https://cloud.google.com/products/calculator>.
 
-- **Workshop day** (8h, both hosts running): ~$25 compute + ~$0.07 disk = **~$25**
-- **Pre-workshop idle** (hosts stopped, disks + 4 reserved IPs attached):
-  ~$50/mo disks + ~$15/mo reserved IPs = **~$65/mo**.  Tear down between
-  workshops to skip this.
-- **Reserved IPv4 cost**: ~$0.005/hr per IP ≈ $3.65/mo each, **regardless of
-  whether the IP is attached to a running VM**.  GCP changed this in Feb 2024
-  — they used to be free when attached, but now everything counts.  4 IPs
-  ≈ **$14.60/mo standing**, or ~$1.50 over a 3-day workshop window if you
-  reserve and release around the event.
+- **Workshop day** (8h, host running): ~$25 compute (n2-standard-64
+  at ~$3.10/hr × 8h) + ~$0.15 disk = **~$25**
+- **Pre-workshop idle** (host stopped, disk + 2 reserved IPs attached):
+  ~$50/mo disk (512 GB pd-balanced) + ~$7/mo reserved IPs = **~$57/mo**.
+  Tear down between workshops to skip this.
+- **Reserved IPv4 cost**: ~$0.005/hr per IP ≈ $3.65/mo each, **regardless
+  of whether the IP is attached to a running VM**.  GCP changed this in
+  Feb 2024 — they used to be free when attached, but now everything
+  counts.  2 IPs ≈ **$7.30/mo standing**, or ~$0.75 over a 3-day workshop
+  window if you reserve and release around the event.
+
+Roughly cost-neutral with the old 2x n2-standard-32 pair (which was also
+~$25 for a workshop day), but simpler to operate and no cross-host
+complexity.
 
 ## Operations
 
 ```bash
-# Stop hosts when not in use
-gcloud compute instances stop host1 host2 --zone=us-central1-a
+# Stop the host when not in use
+gcloud compute instances stop host1 --zone=us-central1-a
 
-# Bring them back
-gcloud compute instances start host1 host2 --zone=us-central1-a
+# Bring it back
+gcloud compute instances start host1 --zone=us-central1-a
 
-# Resize a host (must be stopped)
-gcloud compute instances set-machine-type host1 \
-    --zone=us-central1-a --machine-type=n2-standard-32
-
-# Tear everything down (between workshops)
-gcloud compute instances delete host1 host2 --zone=us-central1-a
+# Tear down between workshops
+gcloud compute instances delete host1 --zone=us-central1-a
 # Reserved IPs and DNS stay; next workshop reattaches them.
 ```
 
-## Provisioning workshop hosts
+## Provisioning the workshop host
 
-The workflow is **hand-configure once, snapshot, deploy from image**:
+The workflow is **hand-configure once, optionally snapshot for DR**:
 
-1. Spin up host1 from a stock Rocky 9 GCP image, attach reserved IP #1
+1. Spin up `host1` from a stock Rocky 9 GCP image (n2-standard-64),
+   attach reserved IP #1
 2. Hand-configure it (admin user, `/etc/lab-passphrase`, `create-account`
-   in `/usr/local/bin/`, shared admin SSH key, ltvm install, `ltvm fetch
-   rocky9`, pre-cloned `~/lustre-release`).  See the bd issues in this
-   repo (`bd ready`) for the punch list.
-3. `gcloud compute images create devday-workshop-vN --source-disk=host1`
-4. `gcloud compute instances create host2 --image=devday-workshop-vN` with
-   reserved IP #2 attached
-5. Failover hosts (host3/host4) are instantiated from the same image when
-   needed, with one of the spare reserved IPs attached
+   in `/usr/local/bin/`, ltvm install, `ltvm fetch rocky9`, agent config
+   in `/etc/skel`).  See the bd issues in this repo (`bd ready`) for the
+   punch list.
+3. **Optional but strongly recommended**: snapshot the disk once the
+   host is fully configured.  `gcloud compute images create
+   devday-workshop-vN --source-disk=host1`.  This is the disaster
+   recovery path — if the host dies mid-workshop, you can spin up a
+   replacement from the image in minutes instead of re-doing the
+   manual config.
 
-No per-host scripted bootstrap — the image *is* the deploy mechanism.
-Per-instance customization (hostname) is handled via `gcloud` flags at
-`instances create` time.
+No scripted bootstrap.  The snapshot is for recovery, not for
+multi-host deploy (there's only one host).

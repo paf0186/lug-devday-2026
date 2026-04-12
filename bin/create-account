@@ -1,11 +1,11 @@
 #!/bin/bash
 # create-account — self-service workshop account creation.
 #
-# Run as `admin` on host1 (or host2) after sshing in with the
-# shared workshop passphrase.  Creates your personal account on
-# BOTH hosts with a baseline gitconfig, passwordless sudo, and
-# (optionally) your SSH public key.  Then log out and ssh back
-# in as your new username.
+# Run as `admin` on the workshop host after sshing in with the
+# shared workshop passphrase.  Creates your personal account
+# with a baseline gitconfig, passwordless sudo, and (optionally)
+# your SSH public key.  Then log out and ssh back in as your
+# new username.
 #
 # Usage:
 #   create-account <username> "Full Name" <email>
@@ -18,15 +18,10 @@
 
 set -euo pipefail
 
-# Source of truth for which hosts an attendee account lives on.
-# Both hosts get every account so failover is "switch hostname,"
-# not "wait for the organizer to re-provision you."
-HOSTS=(host1 host2)
-
 # Workshop passphrase, shared with everyone in the room.  Lives
-# in a root-owned file written by lab-init at host setup time;
-# we read it via sudo because create-account itself runs as the
-# unprivileged admin user.
+# in a root-owned file written at host setup time; we read it
+# via sudo because create-account itself runs as the unprivileged
+# admin user.
 LAB_PASSPHRASE_FILE="/etc/lab-passphrase"
 
 usage() {
@@ -81,7 +76,7 @@ EMAIL="$3"
     "invalid email '$EMAIL'"
 
 # Reserved names: never let an attendee hijack the shared login
-# accounts that the lab depends on.
+# account that the lab depends on.
 case "$USERNAME" in
     admin|root|nobody|sshd|systemd-*)
         die "'$USERNAME' is reserved -- pick a different username" ;;
@@ -94,12 +89,8 @@ WORKSHOP_PASSWORD=$(sudo cat "$LAB_PASSPHRASE_FILE")
 [[ -n "$WORKSHOP_PASSWORD" ]] || die "$LAB_PASSPHRASE_FILE is empty"
 
 # --- existence check (refuse-by-default) ---------------------------------
-# Probe locally first; if the account already exists on this host
-# without --force-password, refuse before we touch anything.  An
-# account that exists locally but not on the other host is a
-# botched previous run; --force-password is the recovery path.
 if [[ $FORCE_PASSWORD -eq 0 ]] && id "$USERNAME" >/dev/null 2>&1; then
-    die "account '$USERNAME' already exists on $(hostname -s).
+    die "account '$USERNAME' already exists.
        Pick a different username, OR re-run with --force-password to
        reset the existing account's password and SSH key (recovery
        path for a forgotten passphrase)."
@@ -149,27 +140,12 @@ if [[ -n "$PUBKEY" ]]; then
     fi
 fi
 
-# --- the remote provisioning script --------------------------------------
-# Heredoc-quoted (no quotes on EOF == expansion happens HERE in the
-# outer shell) so $USERNAME etc. are baked in before sending to the
-# remote.  The remote shell sees concrete values; no quoting games.
-read -r -d '' REMOTE_SCRIPT <<EOF || true
-set -e
+# --- provision the account -----------------------------------------------
+# Single-host workshop: everything runs directly, no cross-host dispatch.
 
-if id "$USERNAME" >/dev/null 2>&1; then
-    if [ "$FORCE_PASSWORD" != "1" ]; then
-        # Local check above caught this on the originating host;
-        # this branch handles the case where the account exists
-        # on the *other* host (rare, but possible after a failed
-        # previous run).
-        echo "create-account: $USERNAME already exists on \$(hostname -s)" >&2
-        echo "  re-run with --force-password to reset" >&2
-        exit 1
-    fi
-    # else: --force-password, fall through and reset
-else
-    sudo useradd -m -G wheel -s /bin/bash "$USERNAME"
-fi
+echo "==> Provisioning $USERNAME..."
+
+sudo useradd -m -G wheel -s /bin/bash "$USERNAME" 2>/dev/null || true
 
 # Set/reset the workshop passphrase.
 echo "$USERNAME:$WORKSHOP_PASSWORD" | sudo chpasswd
@@ -185,48 +161,26 @@ sudo chmod 440 /etc/sudoers.d/"$USERNAME"
 sudo -u "$USERNAME" -i git config --global user.name "$FULLNAME"
 sudo -u "$USERNAME" -i git config --global user.email "$EMAIL"
 
-# Resolve home dir from getent: tilde expansion happens at parse
-# time in the parent shell, before useradd lands the user in
-# /etc/passwd, so ~$USERNAME doesn't work here.
-user_home=\$(getent passwd "$USERNAME" | cut -d: -f6)
-[ -n "\$user_home" ] || { echo "could not resolve home dir for $USERNAME" >&2; exit 1; }
+# Resolve home dir from getent rather than tilde expansion: bash
+# parses ~$USERNAME at the time the line is read, before useradd
+# has a chance to land the user in /etc/passwd, so ~alice doesn't
+# work the first time through.  getent passwd is the unambiguous
+# source of truth.
+user_home=$(getent passwd "$USERNAME" | cut -d: -f6)
+[ -n "$user_home" ] || die "could not resolve home dir for $USERNAME"
 
-sudo install -d -o "$USERNAME" -g "$USERNAME" -m 700 "\$user_home/.ssh"
+sudo install -d -o "$USERNAME" -g "$USERNAME" -m 700 "$user_home/.ssh"
 
 # Pubkey: REPLACE (not append).  This script is the user's only
 # way to manage their authorized_keys, and "I rotated my key but
 # the old one still works" would be a surprising default.  An
 # empty PUBKEY skips this block entirely; the existing
 # authorized_keys (if any) is left alone.
-if [ -n "$PUBKEY" ]; then
-    echo "$PUBKEY" | sudo tee "\$user_home/.ssh/authorized_keys" >/dev/null
-    sudo chown "$USERNAME":"$USERNAME" "\$user_home/.ssh/authorized_keys"
-    sudo chmod 600 "\$user_home/.ssh/authorized_keys"
+if [[ -n "$PUBKEY" ]]; then
+    echo "$PUBKEY" | sudo tee "$user_home/.ssh/authorized_keys" >/dev/null
+    sudo chown "$USERNAME":"$USERNAME" "$user_home/.ssh/authorized_keys"
+    sudo chmod 600 "$user_home/.ssh/authorized_keys"
 fi
-EOF
-
-# --- run on each host ----------------------------------------------------
-# Local-vs-remote dispatch by short hostname.  When `host` matches
-# the current host, run REMOTE_SCRIPT directly under bash so we
-# don't need admin@host1 to be SSH-keyed to itself.  Otherwise ssh
-# over (admin@host1 <-> admin@host2 is keyed by lab-init).
-this_host=$(hostname -s)
-provision_one() {
-    local host="$1"
-    if [[ "$host" == "$this_host" ]]; then
-        bash -c "$REMOTE_SCRIPT"
-    else
-        ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
-            "admin@$host" "$REMOTE_SCRIPT"
-    fi
-}
-
-for host in "${HOSTS[@]}"; do
-    echo "==> Provisioning $USERNAME on $host..."
-    if ! provision_one "$host"; then
-        die "failed to provision $USERNAME on $host (see error above)"
-    fi
-done
 
 # --- final instructions --------------------------------------------------
 if [[ -n "$PUBKEY" ]]; then
@@ -240,12 +194,11 @@ cat <<EOF
 ==========================================
 Account ready: $USERNAME
 Identity:      $FULLNAME <$EMAIL>
-Hosts:         ${HOSTS[*]}
 ==========================================
 
 Log out (type 'exit' or hit Ctrl-D), then ssh back in as yourself:
 
-  ssh $USERNAME@devday1.mulberrytree.us    # or host2
+  ssh $USERNAME@devday1.mulberrytree.us
   $KEY_NOTE
 
 In VSCode, use Remote-SSH: Connect to Host with:

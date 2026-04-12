@@ -13,16 +13,15 @@ Use `bd ready` to see the workshop-prep punch list.
 
 ## Architecture in one paragraph
 
-Two GCP VMs (`host1`, `host2`) with public IPs and nested virt, both
-running ltvm.  Four static IPs are pre-reserved and pre-DNSed
-(`host[1-4].mulberrytree.us`); the spare two are cold standby for
-failover.  No bastion — attendees ssh directly to a host with the shared
-workshop passphrase, run `create-account` once to bootstrap their own
-user (on both hosts at once), then log out and ssh back in as
-themselves.  Optional pubkey paste during account creation skips
-password auth thereafter.  Hosts are deployed from a pre-baked image
-(hand-configured once, snapshot, instantiate); no per-host scripted
-provisioning.
+One GCP `n2-standard-64` (`host1`, 64 vCPU / 256 GiB) with a public IP
+and nested virt, running ltvm.  Two static IPs are pre-reserved and
+pre-DNSed (`devday1.mulberrytree.us` live, `devday2.mulberrytree.us`
+cold spare for disaster recovery).  No bastion, no sibling host —
+attendees ssh directly with the shared workshop passphrase, run
+`create-account` once to bootstrap their own user, then log out and
+ssh back in as themselves.  Optional pubkey paste during account
+creation skips password auth thereafter.  Hand-configured once and
+optionally snapshot for DR; no scripted bootstrap.
 
 ## Attendee quickstart
 

@@ -42,8 +42,9 @@ You need:
 
 ## Day of: bootstrap your account
 
-The workshop has two hosts, `host1` and `host2`, both directly reachable
-from the public internet.  You'll create your account on both at once.
+The workshop runs on one big GCP host reachable at
+`devday1.mulberrytree.us`.  You'll create your account with
+`create-account` and then ssh back in as yourself.
 
 Step 1 — ssh in as the shared admin user with the workshop passphrase
 (`blew-hurry-throughout-rate`, also on the slide):
@@ -65,16 +66,15 @@ from your laptop (the file ending in '.pub', not the private key).
 Press Enter on a blank line to skip and use password auth instead.
 key> ssh-ed25519 AAAAC3Nz...K3l alice@laptop
 
-==> Provisioning alice on host1... done
-==> Provisioning alice on host2... done
+==> Provisioning alice...
 
 Account ready: alice
 ...
 ```
 
-The script creates your account on **both** hosts (so failover is just
-"switch the hostname"), drops your pubkey into `~/.ssh/authorized_keys`,
-sets up your gitconfig, and gives you passwordless sudo.
+The script creates your account, drops your pubkey into
+`~/.ssh/authorized_keys`, sets up your gitconfig, and gives you
+passwordless sudo.
 
 Step 3 — log out and ssh back in as yourself:
 
@@ -124,7 +124,7 @@ it's not necessary.
 
 ## Cloning Lustre and pushing a patch
 
-The Lustre tree is already cloned at `~/lustre-release` on each host.
+The Lustre tree is already cloned at `~/lustre-release` on the host.
 
 ```sh
 cd ~/lustre-release
@@ -146,7 +146,7 @@ re-login with `ssh -A alice@devday1.mulberrytree.us`, and verify with
 
 ## Doing actual workshop work
 
-The workshop hosts run microVMs via `ltvm` for Lustre testing.  Build
+The workshop host runs microVMs via `ltvm` for Lustre testing.  Build
 your modified Lustre against the test kernel, then deploy to a fresh
 microVM:
 
@@ -168,11 +168,11 @@ story.
 
 You have **three identities** in this setup:
 
-| Identity                  | Where it lives             | Used for                          |
-|---------------------------|----------------------------|-----------------------------------|
-| Workshop passphrase       | `/etc/shadow` on the hosts | ssh login (laptop → host)         |
-| `~/.gitconfig` name+email | Workshop host home dir     | git commit attribution to gerrit  |
-| SSH private key           | Your laptop only           | git push to gerrit                |
+| Identity                  | Where it lives            | Used for                          |
+|---------------------------|---------------------------|-----------------------------------|
+| Workshop passphrase       | `/etc/shadow` on the host | ssh login (laptop → host)         |
+| `~/.gitconfig` name+email | Workshop host home dir    | git commit attribution to gerrit  |
+| SSH private key           | Your laptop only          | git push to gerrit                |
 
 The workshop passphrase is shared and printed on a slide.  It only
 protects a short-lived test lab on a small known network — "type one
@@ -202,6 +202,7 @@ hijack a live session, but nothing persists.
   your account and you want to reset it.
 - **Pasted the wrong key into `create-account`** — re-run with
   `--force-password`; the new pubkey replaces the old one.
-- **devday1 is unreachable / unresponsive** — try `devday2.mulberrytree.us`.
-  Your account exists on both hosts, so failover is just changing the
-  hostname.  If both are down, ask an organizer.
+- **devday1 is unreachable / unresponsive** — if the host is hard down,
+  an organizer may bring up a replacement at `devday2.mulberrytree.us`
+  (the cold-spare IP).  Either way, ask an organizer — there's no
+  self-service failover for a dead host.
