@@ -45,7 +45,7 @@ Example:
   create-account alice "Alice Example" alice@example.com
 
 After creation, log out and ssh back in as yourself:
-  ssh alice@host1.mulberrytree.us
+  ssh alice@devday1.mulberrytree.us
 EOF
     exit 2
 }
@@ -245,11 +245,11 @@ Hosts:         ${HOSTS[*]}
 
 Log out (type 'exit' or hit Ctrl-D), then ssh back in as yourself:
 
-  ssh $USERNAME@host1.mulberrytree.us    # or host2
+  ssh $USERNAME@devday1.mulberrytree.us    # or host2
   $KEY_NOTE
 
 In VSCode, use Remote-SSH: Connect to Host with:
 
-  $USERNAME@host1.mulberrytree.us
+  $USERNAME@devday1.mulberrytree.us
 
 EOF

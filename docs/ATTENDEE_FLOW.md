@@ -49,7 +49,7 @@ Step 1 — ssh in as the shared admin user with the workshop passphrase
 (`blew-hurry-throughout-rate`, also on the slide):
 
 ```sh
-ssh admin@host1.mulberrytree.us
+ssh admin@devday1.mulberrytree.us
 # password: blew-hurry-throughout-rate
 ```
 
@@ -80,7 +80,7 @@ Step 3 — log out and ssh back in as yourself:
 
 ```sh
 admin@host1$ exit
-$ ssh alice@host1.mulberrytree.us
+$ ssh alice@devday1.mulberrytree.us
 [alice@host1 ~]$
 ```
 
@@ -100,7 +100,7 @@ tell you to paste the `.pub` file instead.
 Re-run `create-account` with `--force-password`:
 
 ```sh
-ssh admin@host1.mulberrytree.us
+ssh admin@devday1.mulberrytree.us
 admin@host1$ create-account --force-password alice "Alice Example" alice@example.com
 ```
 
@@ -114,7 +114,7 @@ situation.
 Once your account exists, in VSCode:
 
 1. *View → Command Palette → Remote-SSH: Connect to Host...*
-2. Type `alice@host1.mulberrytree.us` (substitute your username)
+2. Type `alice@devday1.mulberrytree.us` (substitute your username)
 3. Pick the platform (Linux), authenticate (key or passphrase)
 4. *File → Open Folder* — `/home/alice` is your home
 
@@ -141,7 +141,7 @@ ever lands on the boxes.
 
 If you logged in *without* `-A`, agent forwarding isn't on and `git
 push gerrit` will fail with "Permission denied (publickey)."  Log out,
-re-login with `ssh -A alice@host1.mulberrytree.us`, and verify with
+re-login with `ssh -A alice@devday1.mulberrytree.us`, and verify with
 `ssh-add -l`.
 
 ## Doing actual workshop work
@@ -202,6 +202,6 @@ hijack a live session, but nothing persists.
   your account and you want to reset it.
 - **Pasted the wrong key into `create-account`** — re-run with
   `--force-password`; the new pubkey replaces the old one.
-- **host1 is unreachable / unresponsive** — try `host2.mulberrytree.us`.
+- **devday1 is unreachable / unresponsive** — try `devday2.mulberrytree.us`.
   Your account exists on both hosts, so failover is just changing the
   hostname.  If both are down, ask an organizer.

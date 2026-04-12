@@ -11,20 +11,23 @@ GCP project: `ltvm-workshop-playground` (us-central1-a)
 | —     | (spare)         | —              | —    | —       | —      | reserved IP #3        |
 | —     | (spare)         | —              | —    | —       | —      | reserved IP #4        |
 
-Hosts have nested virt enabled.  Both run Rocky 9 with `ltvm` installed
-via [bin/lab-init](bin/lab-init).
+Hosts have nested virt enabled and live in the same `us-central1-a` VPC
+subnet, so they share a private network and reach each other at internal
+IPs without egress through the public internet.  `create-account` depends
+on this — `admin@host1` ssh's directly to `admin@host2` over the private
+network to mirror new accounts onto the second host.
 
 DNS (manually maintained, all four point at the corresponding reserved IP):
-- `host1.mulberrytree.us` → `34.61.47.200`   (`devday-host1`)
-- `host2.mulberrytree.us` → `35.232.23.141`  (`devday-host2`)
-- `host3.mulberrytree.us` → `35.224.134.233` (`devday-host3`)
-- `host4.mulberrytree.us` → `34.171.126.149` (`devday-host4`)
+- `devday1.mulberrytree.us` → `34.61.47.200`   (`devday-host1`)
+- `devday2.mulberrytree.us` → `35.232.23.141`  (`devday-host2`)
+- `devday3.mulberrytree.us` → `35.224.134.233` (`devday-host3`)
+- `devday4.mulberrytree.us` → `34.171.126.149` (`devday-host4`)
 
 Four IPs are pre-reserved and pre-DNSed so failover is "attach a spare IP
 to a fresh VM" with zero DNS propagation wait.  At workshop time only two
 VMs exist.  If host1 dies on the day, you have two options:
 1. Detach IP #1 from the dead VM, attach to a fresh VM — attendees keep
-   using `host1.mulberrytree.us`, no rename.
+   using `devday1.mulberrytree.us`, no rename.
 2. Spin up a fresh VM with IP #3 attached — tell the room "host1 is dead,
    switch to host3."  Faster, but renames break in-flight ssh sessions.
 
@@ -37,8 +40,8 @@ Password-only SSH on the public endpoints, with self-service SSH keys via
 [bin/create-account](bin/create-account) and baked into the host image).
 
 - **Shared admin** (used once per attendee, to bootstrap their account):
-  `ssh admin@host1.mulberrytree.us` — passphrase `blew-hurry-throughout-rate`
-- **Per-attendee** (used for everything else): `ssh <username>@host1.mulberrytree.us` —
+  `ssh admin@devday1.mulberrytree.us` — passphrase `blew-hurry-throughout-rate`
+- **Per-attendee** (used for everything else): `ssh <username>@devday1.mulberrytree.us` —
   same passphrase, or key auth if they pasted a pubkey during account
   creation
 - **MicroVMs** (from a host): `ssh root@<vm-name>` — managed by `ltvm`

@@ -28,12 +28,12 @@ provisioning.
 
 ```sh
 # Bootstrap your account (once)
-ssh admin@host1.mulberrytree.us         # passphrase: blew-hurry-throughout-rate
+ssh admin@devday1.mulberrytree.us         # passphrase: blew-hurry-throughout-rate
 admin@host1$ create-account alice "Alice Example" alice@example.com
 admin@host1$ exit
 
 # From now on, log in as yourself
-ssh alice@host1.mulberrytree.us
+ssh alice@devday1.mulberrytree.us
 ```
 
 See [docs/ATTENDEE_FLOW.md](docs/ATTENDEE_FLOW.md) for the full attendee
