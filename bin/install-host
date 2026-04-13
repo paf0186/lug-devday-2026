@@ -87,7 +87,9 @@ chmod -R o+rX "$REPO_DIR"
 REFERENCE_LUSTRE=/opt/lustre-release-reference
 if [[ ! -d "$REFERENCE_LUSTRE/.git" ]]; then
     echo "cloning Lustre into $REFERENCE_LUSTRE (first run, ~minutes)..."
-    git clone --quiet https://review.whamcloud.com/fs/lustre-release \
+    # github mirror is faster and more reliable than review.whamcloud's
+    # HTTPS endpoint, which has given us 502s under load.
+    git clone --quiet https://github.com/lustre/lustre-release.git \
         "$REFERENCE_LUSTRE"
 else
     echo "$REFERENCE_LUSTRE already present, skipping clone"
