@@ -20,9 +20,31 @@ sudo ltvm deploy co1-single --build ~/lustre-release --mount
 sudo ltvm exec co1-single 'lfs df -h /mnt/lustre'
 ```
 
-`ltvm --help` and `ltvm <cmd> --help` cover the rest.
+## Poking at a VM
+
+```sh
+ltvm ssh co1-single              # interactive shell
+ltvm exec co1-single 'lctl dl'   # one-shot command
+ltvm console-log co1-single      # serial console output
+```
+
+VMs share a host-local bridge (`192.168.100.0/24`) and can `ssh`
+each other by name — handy for multi-node cluster exercises.
+
+## Panic + crashdump
+
+```sh
+sudo ltvm nmi co1-single                            # inject NMI → panic + kdump
+sudo ltvm crash-collect co1-single --mod-dir ~/lustre-release
+```
+
+`crash-collect` waits for kdump to finish, pulls the vmcore back to
+the host, and runs the Lustre crash recipe.  `--trigger` combines the
+two steps.
 
 ## Gerrit push
 
 `git push gerrit HEAD:refs/for/master` from `~/lustre-release`.
 Uses the attendee's forwarded SSH agent — no keys on this host.
+
+`ltvm --help` and `ltvm <cmd> --help` cover the rest.
