@@ -61,52 +61,65 @@ while [[ $# -gt 0 && "$1" == --* ]]; do
     esac
 done
 
+# Username validation, factored out so the interactive prompt can
+# re-ask on a bad username without forcing the attendee to re-enter
+# name and email.  Returns 0 on pass, 1 on fail, and prints the
+# reason to stderr.  The caller decides whether to retry or die.
+check_username() {
+    local u="$1"
+    if [[ ! "$u" =~ ^[a-z][a-z0-9_-]{0,30}$ ]]; then
+        echo "invalid username '$u': must match ^[a-z][a-z0-9_-]{0,30}\$" >&2
+        return 1
+    fi
+    case "$u" in
+        admin|root|nobody|sshd|systemd-*)
+            echo "'$u' is reserved -- pick a different username" >&2
+            return 1 ;;
+    esac
+    if [[ $FORCE_PASSWORD -eq 0 ]] && id "$u" >/dev/null 2>&1; then
+        echo "account '$u' already exists." >&2
+        echo "       Pick a different username, OR re-run with --force-password" >&2
+        echo "       to reset the existing account's password and SSH key" >&2
+        echo "       (recovery path for a forgotten passphrase)." >&2
+        return 1
+    fi
+    return 0
+}
+
 # Accept either (username, "Full Name", email) on the CLI, or zero
 # args and prompt for each.  The interactive path is what the admin
 # login hook uses -- attendees just see prompts, no need to remember
 # the argument order.
 if [[ $# -eq 0 ]]; then
     echo "Create your workshop account.  Ctrl-C to abort." >&2
-    read -r -p "username (lowercase, letters/digits/_-): " USERNAME
+    # Validate the username before asking for the rest -- catching
+    # "name already taken" after the attendee has typed their full
+    # name and email is a small but real papercut.
+    while :; do
+        read -r -p "username (lowercase, letters/digits/_-): " USERNAME
+        check_username "$USERNAME" && break
+        echo
+    done
     read -r -p "full name (for git commits): " FULLNAME
     read -r -p "email (for git commits): " EMAIL
 elif [[ $# -eq 3 ]]; then
     USERNAME="$1"
     FULLNAME="$2"
     EMAIL="$3"
+    check_username "$USERNAME" || exit 1
 else
     usage
 fi
 
-# Username sanity: must look like a real /etc/passwd entry, not
-# a stray quote, '../', or shell metacharacter.
-[[ "$USERNAME" =~ ^[a-z][a-z0-9_-]{0,30}$ ]] || die \
-    "invalid username '$USERNAME': must match ^[a-z][a-z0-9_-]{0,30}\$"
-
 # Email sanity: not bulletproof, just enough to catch obvious typos.
 [[ "$EMAIL" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]] || die \
     "invalid email '$EMAIL'"
-
-# Reserved names: never let an attendee hijack the shared login
-# account that the lab depends on.
-case "$USERNAME" in
-    admin|root|nobody|sshd|systemd-*)
-        die "'$USERNAME' is reserved -- pick a different username" ;;
-esac
 
 # --- read the workshop passphrase ----------------------------------------
 sudo test -r "$LAB_PASSPHRASE_FILE" \
     || die "$LAB_PASSPHRASE_FILE missing -- ask the workshop organizer"
 WORKSHOP_PASSWORD=$(sudo cat "$LAB_PASSPHRASE_FILE")
 [[ -n "$WORKSHOP_PASSWORD" ]] || die "$LAB_PASSPHRASE_FILE is empty"
-
-# --- existence check (refuse-by-default) ---------------------------------
-if [[ $FORCE_PASSWORD -eq 0 ]] && id "$USERNAME" >/dev/null 2>&1; then
-    die "account '$USERNAME' already exists.
-       Pick a different username, OR re-run with --force-password to
-       reset the existing account's password and SSH key (recovery
-       path for a forgotten passphrase)."
-fi
 
 # --- pubkey paste --------------------------------------------------------
 # Optional.  Blank line skips and falls back to password auth.
@@ -163,6 +176,34 @@ if [[ -n "$PUBKEY" ]]; then
     fi
 fi
 
+# --- password (only if we're doing password auth) ------------------------
+# If the attendee skipped the pubkey, they'll be typing a password at
+# every login.  Let them set their own instead of living on the shared
+# workshop passphrase -- still prompt-confirmed to catch typos, blank
+# falls back to the workshop passphrase so the flow stays one-hit for
+# attendees who don't care.  We only do this in interactive mode; CLI
+# invocations (organizer scripts) keep the old lab-passphrase default.
+ACCOUNT_PASSWORD="$WORKSHOP_PASSWORD"
+if [[ -z "$PUBKEY" && -t 0 ]]; then
+    echo
+    echo "You're using password auth.  Set your own password, or press"
+    echo "Enter on a blank line to use the shared workshop passphrase."
+    while :; do
+        read -r -s -p "password (blank = workshop passphrase): " pw1
+        echo
+        if [[ -z "$pw1" ]]; then
+            break
+        fi
+        read -r -s -p "confirm password: " pw2
+        echo
+        if [[ "$pw1" == "$pw2" ]]; then
+            ACCOUNT_PASSWORD="$pw1"
+            break
+        fi
+        echo "passwords didn't match, try again" >&2
+    done
+fi
+
 # --- provision the account -----------------------------------------------
 # Single-host workshop: everything runs directly, no cross-host dispatch.
 
@@ -170,8 +211,9 @@ echo "==> Provisioning $USERNAME..."
 
 sudo useradd -m -G wheel -s /bin/bash "$USERNAME" 2>/dev/null || true
 
-# Set/reset the workshop passphrase.
-echo "$USERNAME:$WORKSHOP_PASSWORD" | sudo chpasswd
+# Set/reset the account password (custom one if they entered it,
+# otherwise the shared workshop passphrase).
+echo "$USERNAME:$ACCOUNT_PASSWORD" | sudo chpasswd
 
 # Passwordless sudo via per-user drop-in.  Mode 440 is what visudo
 # writes; anything looser triggers a sudo parse-time warning.
@@ -208,6 +250,8 @@ fi
 # --- final instructions --------------------------------------------------
 if [[ -n "$PUBKEY" ]]; then
     KEY_NOTE="(no password needed — your key is installed)"
+elif [[ "$ACCOUNT_PASSWORD" != "$WORKSHOP_PASSWORD" ]]; then
+    KEY_NOTE="(use the password you just set)"
 else
     KEY_NOTE="(use the workshop passphrase from the slide)"
 fi
