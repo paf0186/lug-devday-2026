@@ -69,6 +69,8 @@ install -d -m 755 /etc/skel
 link "$REPO_DIR/attendee-home-template/CLAUDE.md" /etc/skel/CLAUDE.md
 link "$REPO_DIR/attendee-home-template/CLAUDE.md" /etc/skel/AGENTS.md
 
+link "$REPO_DIR/motd" /etc/motd
+
 # --- world-readability ---------------------------------------------------
 # New attendee accounts get ~/CLAUDE.md and ~/AGENTS.md as symlinks
 # pointing into ~admin/lug-devday-2026/attendee-home-template/CLAUDE.md.  For the symlinks

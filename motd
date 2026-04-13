@@ -1,0 +1,23 @@
+
+────────────────────────────────────────────────────────────
+ Welcome to the LUG Dev Day workshop host.
+
+ ~/lustre-release      Lustre master, pre-cloned.  Your copy --
+                       edit, build, push.
+ ~/CLAUDE.md           Environment cheat sheet (also AGENTS.md).
+                       Read it, or point your agent at it.
+
+ ltvm                  Build + run Lustre microVMs (single global
+                       config, shared artifact cache).  Start with:
+                         ltvm --help
+                         ltvm create <yourname>-testvm1
+
+ Crash analysis        drgn + lustre-drgn-tools installed.  See the
+                       "drgn crash analysis" section of CLAUDE.md.
+
+ /shared/<user>/       World-writable drop zone for trading files
+                       with other attendees.
+
+ Have fun.  Everything is disposable.
+────────────────────────────────────────────────────────────
+
