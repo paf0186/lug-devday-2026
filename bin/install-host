@@ -8,7 +8,7 @@
 #   * writes /etc/lab-passphrase (mode 600) if missing
 #   * symlinks /usr/local/bin/create-account -> repo/bin/create-account
 #   * symlinks /home/admin/.bash_profile     -> repo/bin/admin-first-login
-#   * symlinks /etc/skel/{CLAUDE,AGENTS}.md  -> repo/skel/CLAUDE.md
+#   * symlinks /etc/attendee-home-template/{CLAUDE,AGENTS}.md  -> repo/attendee-home-template/CLAUDE.md
 #   * opens up ~admin and the repo so attendee users can traverse
 #     the symlinks into ~admin/lug-devday-2026
 
@@ -19,7 +19,7 @@ die() { echo "install-host: $*" >&2; exit 1; }
 [[ $EUID -eq 0 ]] || die "must run as root"
 
 REPO_DIR="${1:-/home/admin/lug-devday-2026}"
-[[ -d "$REPO_DIR/bin" && -d "$REPO_DIR/skel" ]] \
+[[ -d "$REPO_DIR/bin" && -d "$REPO_DIR/attendee-home-template" ]] \
     || die "$REPO_DIR does not look like the lug-devday-2026 checkout"
 
 ADMIN_HOME=/home/admin
@@ -65,13 +65,13 @@ link "$REPO_DIR/bin/create-account"    /usr/local/bin/create-account
 link "$REPO_DIR/bin/admin-first-login" "$ADMIN_HOME/.bash_profile"
 chown -h admin:admin "$ADMIN_HOME/.bash_profile"
 
-install -d -m 755 /etc/skel
-link "$REPO_DIR/skel/CLAUDE.md" /etc/skel/CLAUDE.md
-link "$REPO_DIR/skel/CLAUDE.md" /etc/skel/AGENTS.md
+install -d -m 755 /etc/attendee-home-template
+link "$REPO_DIR/attendee-home-template/CLAUDE.md" /etc/attendee-home-template/CLAUDE.md
+link "$REPO_DIR/attendee-home-template/CLAUDE.md" /etc/attendee-home-template/AGENTS.md
 
 # --- world-readability ---------------------------------------------------
 # New attendee accounts get ~/CLAUDE.md and ~/AGENTS.md as symlinks
-# pointing into ~admin/lug-devday-2026/skel/CLAUDE.md.  For the symlinks
+# pointing into ~admin/lug-devday-2026/attendee-home-template/CLAUDE.md.  For the symlinks
 # to resolve as the attendee user, every path component needs +x for
 # other, and the target needs +r.  chmod -R o+rX hits both: +r for
 # files, +X for traversable dirs only.
