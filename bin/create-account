@@ -236,6 +236,14 @@ user_home=$(getent passwd "$USERNAME" | cut -d: -f6)
 
 sudo install -d -o "$USERNAME" -g "$USERNAME" -m 700 "$user_home/.ssh"
 
+# Per-user scratch dir under /shared for trading files with other
+# attendees.  Mode 777 on purpose -- /shared itself is sticky, so
+# nobody can blow away someone else's top-level dir, but anyone
+# can drop a file into anyone's subdir.
+if [[ -d /shared ]]; then
+    sudo install -d -o "$USERNAME" -g "$USERNAME" -m 777 "/shared/$USERNAME"
+fi
+
 # Give the attendee a ready-to-hack Lustre tree.  cp -a from the
 # reference dir populated by install-host: fast (local disk, no
 # network, no pack re-resolution) and lets them rm -rf their copy

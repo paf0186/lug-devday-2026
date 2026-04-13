@@ -7,6 +7,9 @@ Lustre developer work through hands-on exercises.
 
 - `~/lustre-release` — Lustre source checkout (pre-cloned)
 - `ltvm` — tool for building + running Lustre microVMs
+- `/shared/<username>/` — per-user drop zone; anyone on the host
+  can read and write here.  Use it to pass vmcores, patches, logs,
+  etc. between attendees without faffing with scp.
 
 ## The usual cycle
 

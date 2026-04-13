@@ -84,6 +84,14 @@ chmod -R o+rX "$REPO_DIR"
 # create-account copy from there.  `git clone --local` would use
 # hardlinks but we copy so attendees can freely blow away their copy
 # without corrupting the reference.
+# --- /shared drop zone ---------------------------------------------------
+# Scratch space for attendees to swap files: logs, vmcores, patches,
+# whatever.  Sticky so attendees can't wipe each others' top-level
+# dirs (same semantics as /tmp).  Per-user subdirs get created by
+# create-account.
+install -d -m 1777 /shared
+echo "ensured /shared (mode 1777)"
+
 REFERENCE_LUSTRE=/opt/lustre-release-reference
 if [[ ! -d "$REFERENCE_LUSTRE/.git" ]]; then
     echo "cloning Lustre into $REFERENCE_LUSTRE (first run, ~minutes)..."
