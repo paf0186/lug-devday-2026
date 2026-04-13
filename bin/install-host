@@ -41,6 +41,14 @@ else
     echo "/etc/lab-passphrase already present, leaving alone"
 fi
 
+# --- admin password ------------------------------------------------------
+# Keep admin's login password in sync with /etc/lab-passphrase.  This
+# is the password attendees type at the ssh prompt on the workshop
+# slide, so drift between the two silently locks the whole room out.
+# chpasswd reads user:password on stdin.
+printf 'admin:%s\n' "$(cat /etc/lab-passphrase)" | chpasswd
+echo "admin password set from /etc/lab-passphrase"
+
 # --- symlinks ------------------------------------------------------------
 # `ln -sfn` replaces an existing symlink atomically.  `-n` matters when
 # the target is a directory symlink -- without it, ln descends into the
