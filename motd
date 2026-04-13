@@ -7,10 +7,11 @@
  ~/CLAUDE.md           Environment cheat sheet (also AGENTS.md).
                        Read it, or point your agent at it.
 
- ltvm                  Build + run Lustre microVMs (single global
-                       config, shared artifact cache).  Start with:
+ ltvm                  Build + run Lustre microVMs.  Start with:
                          ltvm --help
+                         ltvm list
                          ltvm create <yourname>-testvm1
+                         ltvm destroy <yourname>-testvm1
 
  Crash analysis        drgn + lustre-drgn-tools installed.  See the
                        "drgn crash analysis" section of CLAUDE.md.
