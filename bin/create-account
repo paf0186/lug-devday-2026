@@ -61,10 +61,22 @@ while [[ $# -gt 0 && "$1" == --* ]]; do
     esac
 done
 
-[[ $# -eq 3 ]] || usage
-USERNAME="$1"
-FULLNAME="$2"
-EMAIL="$3"
+# Accept either (username, "Full Name", email) on the CLI, or zero
+# args and prompt for each.  The interactive path is what the admin
+# login hook uses -- attendees just see prompts, no need to remember
+# the argument order.
+if [[ $# -eq 0 ]]; then
+    echo "Create your workshop account.  Ctrl-C to abort." >&2
+    read -r -p "username (lowercase, letters/digits/_-): " USERNAME
+    read -r -p "full name (for git commits): " FULLNAME
+    read -r -p "email (for git commits): " EMAIL
+elif [[ $# -eq 3 ]]; then
+    USERNAME="$1"
+    FULLNAME="$2"
+    EMAIL="$3"
+else
+    usage
+fi
 
 # Username sanity: must look like a real /etc/passwd entry, not
 # a stray quote, '../', or shell metacharacter.
@@ -108,7 +120,18 @@ echo "Press Enter on a blank line to skip and use password auth instead."
 read -r -p "key> " PUBKEY || PUBKEY=""
 
 if [[ -n "$PUBKEY" ]]; then
-    # Strip leading/trailing whitespace from the paste.
+    # Terminal paste is a minefield: Windows line endings, BOMs from
+    # editors, surrounding quotes from "helpful" copy tools, and the
+    # odd non-breaking space from rich-text clipboards.  Normalize
+    # before validating so we don't reject a key that would have been
+    # fine after a single invisible character was stripped.
+    PUBKEY="${PUBKEY//$'\r'/}"
+    PUBKEY="${PUBKEY#$'\xef\xbb\xbf'}"
+    PUBKEY="${PUBKEY//$'\xc2\xa0'/ }"
+    if [[ ( "$PUBKEY" == \"*\" && "$PUBKEY" == *\" ) \
+       || ( "$PUBKEY" == \'*\' && "$PUBKEY" == *\' ) ]]; then
+        PUBKEY="${PUBKEY:1:${#PUBKEY}-2}"
+    fi
     PUBKEY="${PUBKEY#"${PUBKEY%%[![:space:]]*}"}"
     PUBKEY="${PUBKEY%"${PUBKEY##*[![:space:]]}"}"
 

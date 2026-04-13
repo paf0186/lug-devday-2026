@@ -1,0 +1,51 @@
+#!/bin/bash
+# admin-first-login -- sourced as admin's ~/.bash_profile on the
+# workshop host.  Greets the attendee, runs create-account
+# interactively, and tells them to exit + reconnect as themselves.
+#
+# Ctrl-C at any prompt drops the attendee to a normal shell with a
+# reminder of how to run create-account manually -- used for the
+# "I'm an organizer just poking at the host" path and for recovery.
+
+# Standard profile behavior first, so the interactive shell we fall
+# through to is properly initialized (PATH, aliases, prompt, ...).
+[[ -f ~/.bashrc ]] && . ~/.bashrc
+
+# Only run the bootstrap flow for interactive logins -- scp, rsync,
+# and `ssh admin@host somecmd` must not trigger prompts.
+[[ $- == *i* ]] || return 0
+
+cat <<'EOF'
+
+===========================================================
+  Welcome to the LUG Dev Day workshop host.
+
+  You are logged in as the shared "admin" account.  The next
+  step is to create your own personal account, which you'll
+  use for the rest of the workshop.
+
+  Press Ctrl-C to skip and get a shell instead; you can run
+  'create-account' manually whenever you're ready.
+===========================================================
+
+EOF
+
+if create-account; then
+    cat <<'EOF'
+
+Next: type 'exit' (or hit Ctrl-D) and ssh back in as your
+new username.  See you on the other side.
+
+EOF
+else
+    rc=$?
+    if [[ $rc -eq 130 ]]; then
+        echo
+        echo "(Skipped.  Run 'create-account' when you're ready.)"
+        echo
+    else
+        echo
+        echo "(create-account exited $rc.  Fix the input and re-run it.)"
+        echo
+    fi
+fi

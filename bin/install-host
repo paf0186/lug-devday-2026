@@ -1,0 +1,73 @@
+#!/bin/bash
+# install-host -- one-shot installer for the workshop host.
+#
+# Run as root on host1 after cloning this repo to ~admin.  Idempotent:
+# safe to re-run after a `git pull` to refresh the symlinks.
+#
+# What it does:
+#   * writes /etc/lab-passphrase (mode 600) if missing
+#   * symlinks /usr/local/bin/create-account -> repo/bin/create-account
+#   * symlinks /home/admin/.bash_profile     -> repo/bin/admin-first-login
+#   * symlinks /etc/skel/{CLAUDE,AGENTS}.md  -> repo/skel/CLAUDE.md
+#   * opens up ~admin and the repo so attendee users can traverse
+#     the symlinks into ~admin/lug-devday-2026
+
+set -euo pipefail
+
+die() { echo "install-host: $*" >&2; exit 1; }
+
+[[ $EUID -eq 0 ]] || die "must run as root"
+
+REPO_DIR="${1:-/home/admin/lug-devday-2026}"
+[[ -d "$REPO_DIR/bin" && -d "$REPO_DIR/skel" ]] \
+    || die "$REPO_DIR does not look like the lug-devday-2026 checkout"
+
+ADMIN_HOME=/home/admin
+id admin >/dev/null 2>&1 || die "admin user does not exist"
+
+# --- /etc/lab-passphrase -------------------------------------------------
+# Don't bake the passphrase into the repo.  If the file isn't already
+# there, prompt the operator once -- this runs hand-configured, not in
+# CI, so an interactive prompt is fine.
+if [[ ! -s /etc/lab-passphrase ]]; then
+    read -r -p "Workshop passphrase (written to /etc/lab-passphrase): " pw
+    [[ -n "$pw" ]] || die "passphrase must not be empty"
+    umask 077
+    printf '%s\n' "$pw" > /etc/lab-passphrase
+    chown root:root /etc/lab-passphrase
+    chmod 600 /etc/lab-passphrase
+    echo "wrote /etc/lab-passphrase"
+else
+    echo "/etc/lab-passphrase already present, leaving alone"
+fi
+
+# --- symlinks ------------------------------------------------------------
+# `ln -sfn` replaces an existing symlink atomically.  `-n` matters when
+# the target is a directory symlink -- without it, ln descends into the
+# existing link and creates the new symlink *inside* it.  Harmless for
+# files, but the habit is cheap.
+link() {
+    local src="$1" dst="$2"
+    ln -sfn "$src" "$dst"
+    echo "  $dst -> $src"
+}
+
+echo "installing symlinks:"
+link "$REPO_DIR/bin/create-account"    /usr/local/bin/create-account
+link "$REPO_DIR/bin/admin-first-login" "$ADMIN_HOME/.bash_profile"
+chown -h admin:admin "$ADMIN_HOME/.bash_profile"
+
+install -d -m 755 /etc/skel
+link "$REPO_DIR/skel/CLAUDE.md" /etc/skel/CLAUDE.md
+link "$REPO_DIR/skel/CLAUDE.md" /etc/skel/AGENTS.md
+
+# --- world-readability ---------------------------------------------------
+# New attendee accounts get ~/CLAUDE.md and ~/AGENTS.md as symlinks
+# pointing into ~admin/lug-devday-2026/skel/CLAUDE.md.  For the symlinks
+# to resolve as the attendee user, every path component needs +x for
+# other, and the target needs +r.  chmod -R o+rX hits both: +r for
+# files, +X for traversable dirs only.
+chmod o+x "$ADMIN_HOME"
+chmod -R o+rX "$REPO_DIR"
+
+echo "done."
