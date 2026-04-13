@@ -236,6 +236,19 @@ user_home=$(getent passwd "$USERNAME" | cut -d: -f6)
 
 sudo install -d -o "$USERNAME" -g "$USERNAME" -m 700 "$user_home/.ssh"
 
+# Give the attendee a ready-to-hack Lustre tree.  cp -a from the
+# reference dir populated by install-host: fast (local disk, no
+# network, no pack re-resolution) and lets them rm -rf their copy
+# without touching anyone else's.  Skipped silently if the reference
+# isn't there or if the user already has a tree (re-running with
+# --force-password shouldn't clobber their edits).
+REFERENCE_LUSTRE=/opt/lustre-release-reference
+if [[ -d "$REFERENCE_LUSTRE/.git" && ! -e "$user_home/lustre-release" ]]; then
+    echo "    copying Lustre tree..."
+    sudo cp -a "$REFERENCE_LUSTRE" "$user_home/lustre-release"
+    sudo chown -R "$USERNAME":"$USERNAME" "$user_home/lustre-release"
+fi
+
 # Pubkey: REPLACE (not append).  This script is the user's only
 # way to manage their authorized_keys, and "I rotated my key but
 # the old one still works" would be a surprising default.  An

@@ -78,4 +78,20 @@ link "$REPO_DIR/attendee-home-template/CLAUDE.md" /etc/skel/AGENTS.md
 chmod o+x "$ADMIN_HOME"
 chmod -R o+rX "$REPO_DIR"
 
+# --- reference Lustre checkout -------------------------------------------
+# Cloning lustre-release is minutes of network+CPU; attendees don't need
+# to wait for that on first login.  Clone once into /opt and have
+# create-account copy from there.  `git clone --local` would use
+# hardlinks but we copy so attendees can freely blow away their copy
+# without corrupting the reference.
+REFERENCE_LUSTRE=/opt/lustre-release-reference
+if [[ ! -d "$REFERENCE_LUSTRE/.git" ]]; then
+    echo "cloning Lustre into $REFERENCE_LUSTRE (first run, ~minutes)..."
+    git clone --quiet https://review.whamcloud.com/fs/lustre-release \
+        "$REFERENCE_LUSTRE"
+else
+    echo "$REFERENCE_LUSTRE already present, skipping clone"
+fi
+chmod -R o+rX "$REFERENCE_LUSTRE"
+
 echo "done."
