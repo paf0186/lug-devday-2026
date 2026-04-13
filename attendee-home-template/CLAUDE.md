@@ -59,6 +59,41 @@ single JSON report covering panic backtrace, OBD devices, LDLM locks,
 in-flight RPCs, OSC state, D-state tasks, and the dk log tail -- what
 you want on first contact with an unfamiliar crash.
 
+### End-to-end: crash → triage
+
+```sh
+# 1. Build + deploy Lustre to a running VM
+ltvm build-lustre rocky9 ~/lustre-release
+sudo ltvm deploy co1-single --build ~/lustre-release --mount
+
+# 2. Panic the VM (or reproduce the bug you're chasing)
+sudo ltvm nmi co1-single
+
+# 3. Wait for kdump + reboot, pull vmcore, run triage.
+#    --mod-dir points at your Lustre tree so triage can resolve
+#    Lustre symbols (mdc_*, osc_*, ldlm_*); without it you only
+#    get kernel symbols.  ltvm auto-resolves vmlinux from the
+#    target's build output.
+sudo ltvm crash-collect co1-single --mod-dir ~/lustre-release
+# → /tmp/crashes/crash-co1-single-<ts>/vmcore  +  triage JSON on stdout
+```
+
+### Running individual drgn scripts
+
+After `crash-collect`, you have a vmcore on the host.  Point any
+single-topic script at it, along with the matching `vmlinux` from
+ltvm's build output and your Lustre tree for the module symbols:
+
+```sh
+VMCORE=/tmp/crashes/crash-co1-single-<ts>/vmcore
+VMLINUX=/home/admin/lustre-test-vms/output/rocky9/kernels/*/vmlinux
+LDRGN=/home/admin/llm_code_and_review_tools/lustre-drgn-tools
+
+python3 $LDRGN/ldlm_dumplocks.py \
+    --vmcore "$VMCORE" --vmlinux $VMLINUX \
+    --mod-dir ~/lustre-release --pretty
+```
+
 Single-topic scripts, use when triage points you at a specific
 subsystem:
 
