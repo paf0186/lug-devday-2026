@@ -67,3 +67,9 @@ Single-topic scripts (all take `--vmcore --vmlinux --mod-dir --pretty`):
 Uses the attendee's forwarded SSH agent — no keys on this host.
 
 `ltvm --help` and `ltvm <cmd> --help` cover the rest.
+
+**Organizer-only commands:** `build-container`, `build-kernel`,
+`build-image`, `build-all`, `fetch`.  These write to the shared
+artifact cache under `~admin/lustre-test-vms/output/` and would race
+if two attendees ran them at once.  The cache is pre-populated before
+the workshop -- you only need `build-lustre` plus the VM commands.
