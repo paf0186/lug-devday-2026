@@ -113,6 +113,39 @@ subsystem:
 `git push gerrit HEAD:refs/for/master` from `~/lustre-release`.
 Uses the attendee's forwarded SSH agent — no keys on this host.
 
+## Lustre commit style
+
+Before pushing, sanity-check the patch:
+
+```sh
+git diff HEAD | ./contrib/scripts/checkpatch.pl
+```
+
+Commit message format:
+
+```
+LU-nnnnn component: short description under 64 columns
+
+Body text wrapped to 60 columns.  Explain *why*, not *what* --
+the diff already tells you what changed.
+
+Test-Parameters: testlist=sanity
+Signed-off-by: Your Name <you@example.com>
+```
+
+Rules:
+- Subject line: `LU-nnnnn <component>:` prefix, ≤64 columns.  Use
+  `LU-0000` if no ticket applies yet.
+- ASCII only in the message -- no em dashes or curly quotes (use
+  `--`).  Gerrit's tooling chokes on smart punctuation.
+- On `git commit --amend`: preserve the existing `Change-Id:` trailer.
+  Never invent one, and never add one manually to a new commit --
+  the `commit-msg` hook generates it.
+- Trailer block (`Signed-off-by`, `Test-Parameters`, `Change-Id`, ...)
+  must be contiguous -- no blank lines between trailers.
+- `Test-Parameters:` is only for test-only patches; don't add it if
+  you touched kernel or userspace code.  Don't invent test names.
+
 `ltvm --help` and `ltvm <cmd> --help` cover the rest.
 
 **Organizer-only commands:** `build-container`, `build-kernel`,
