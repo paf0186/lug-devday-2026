@@ -20,15 +20,15 @@ ltvm build-lustre rocky9 ~/lustre-release
 # Create + deploy + mount a VM (naming: co1-<role>, use checkout N)
 sudo ltvm ensure co1-single --vcpus 2 --mem 4096 --mdt-disks 1 --ost-disks 3
 sudo ltvm deploy co1-single --build ~/lustre-release --mount
-sudo ltvm exec co1-single 'lfs df -h /mnt/lustre'
+ssh root@co1-single 'lfs df -h /mnt/lustre'
 ```
 
 ## Poking at a VM
 
 ```sh
-ltvm ssh co1-single              # interactive shell
-ltvm exec co1-single 'lctl dl'   # one-shot command
-ltvm console-log co1-single      # serial console output
+ssh root@co1-single              # interactive shell (VM name resolves via dnsmasq)
+ssh root@co1-single 'lctl dl'    # one-shot command
+ltvm console-log co1-single      # serial console output (through QEMU, not ssh)
 ```
 
 VMs share a host-local bridge (`192.168.100.0/24`) and can `ssh`

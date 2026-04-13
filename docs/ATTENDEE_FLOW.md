@@ -154,7 +154,7 @@ microVM:
 sudo ltvm build-lustre rocky9 ~/lustre-release
 sudo ltvm create co1-test --os rocky9 --mdt-disks 1 --ost-disks 2
 sudo ltvm deploy co1-test --build ~/lustre-release --mount
-sudo ltvm exec co1-test 'lctl dl'
+ssh root@co1-test 'lctl dl'
 ```
 
 `ltvm list` shows everyone's VMs on the host along with who created
