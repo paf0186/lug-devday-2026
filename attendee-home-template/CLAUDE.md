@@ -42,6 +42,25 @@ sudo ltvm crash-collect co1-single --mod-dir ~/lustre-release
 the host, and runs the Lustre crash recipe.  `--trigger` combines the
 two steps.
 
+## drgn crash analysis
+
+Lustre-aware drgn scripts live at
+`/home/admin/llm_code_and_review_tools/lustre-drgn-tools/`:
+
+```sh
+LDRGN=/home/admin/llm_code_and_review_tools/lustre-drgn-tools
+python3 "$LDRGN/lustre_triage.py" \
+    --vmcore <path> --vmlinux <path> --mod-dir ~/lustre-release --pretty
+```
+
+`lustre_triage.py` returns a structured overview: backtraces with source
+lines, OBD devices, LDLM lock namespaces, OSC grant/dirty stats, in-flight
+RPCs, dk log tail, stack groupings.
+
+Single-topic scripts (all take `--vmcore --vmlinux --mod-dir --pretty`):
+`obd_devs.py`, `ldlm_dumplocks.py`, `ldlm_deadlock.py`, `ptlrpc.py`,
+`dk.py`, `lustre_waitq.py`, `osc_stats.py`.
+
 ## Gerrit push
 
 `git push gerrit HEAD:refs/for/master` from `~/lustre-release`.
