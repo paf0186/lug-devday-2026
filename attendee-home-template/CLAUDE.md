@@ -44,22 +44,34 @@ two steps.
 
 ## drgn crash analysis
 
-Lustre-aware drgn scripts live at
-`/home/admin/llm_code_and_review_tools/lustre-drgn-tools/`:
+[drgn](https://drgn.readthedocs.io/) is a programmable debugger for
+Linux kernels and vmcores -- Python-scriptable access to kernel
+structs without the quirks of the traditional `crash` REPL.  Installed
+globally on this host (`python3 -c "import drgn"` works).
 
-```sh
-LDRGN=/home/admin/llm_code_and_review_tools/lustre-drgn-tools
-python3 "$LDRGN/lustre_triage.py" \
-    --vmcore <path> --vmlinux <path> --mod-dir ~/lustre-release --pretty
-```
+Lustre-aware scripts live at
+`/home/admin/llm_code_and_review_tools/lustre-drgn-tools/` and run as
+`python3 <script>.py --vmcore <path> --vmlinux <path> --mod-dir ~/lustre-release --pretty`.
+All emit JSON by default; add `--text` for a human-readable dump.
 
-`lustre_triage.py` returns a structured overview: backtraces with source
-lines, OBD devices, LDLM lock namespaces, OSC grant/dirty stats, in-flight
-RPCs, dk log tail, stack groupings.
+Start with `lustre_triage.py`: one-shot run of everything below, a
+single JSON report covering panic backtrace, OBD devices, LDLM locks,
+in-flight RPCs, OSC state, D-state tasks, and the dk log tail -- what
+you want on first contact with an unfamiliar crash.
 
-Single-topic scripts (all take `--vmcore --vmlinux --mod-dir --pretty`):
-`obd_devs.py`, `ldlm_dumplocks.py`, `ldlm_deadlock.py`, `ptlrpc.py`,
-`dk.py`, `lustre_waitq.py`, `osc_stats.py`.
+Single-topic scripts, use when triage points you at a specific
+subsystem:
+
+| Script                  | Answers                                                |
+|-------------------------|--------------------------------------------------------|
+| `obd_devs.py`           | What OBD devices (MDC/OSC/MDT/OST/LOV/LMV) exist and what state they're in. |
+| `ldlm_dumplocks.py`     | Every lock in every LDLM namespace: holder, mode, resource, flags.          |
+| `ldlm_deadlock.py`      | Cross-namespace cycle detection -- "who's waiting on whom."                 |
+| `ptlrpc.py`             | In-flight RPCs per import/service: xid, opcode, phase, age.                 |
+| `osc_stats.py`          | Per-OST grant, dirty pages, lost grant -- grant accounting bugs.            |
+| `lustre_waitq.py`       | Uninterruptible tasks blocked in Lustre, grouped by wait point.             |
+| `dk.py`                 | The Lustre debug (`lctl dk`) ring buffer from the crashed kernel.           |
+| `dump_lustre_hashes.py` | `cfs_hash` + `rhashtable` occupancy across every Lustre subsystem.          |
 
 ## Gerrit push
 
