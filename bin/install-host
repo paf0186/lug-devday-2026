@@ -80,6 +80,16 @@ link "$REPO_DIR/motd" /etc/motd
 chmod o+x "$ADMIN_HOME"
 chmod -R o+rX "$REPO_DIR"
 
+# Let attendee users run git against admin-owned repos (ltvm lives
+# at /home/admin/lustre-test-vms and has a `git pull` inside `ltvm
+# update`).  Without this, git refuses with "dubious ownership".
+# System-wide /etc/gitconfig keeps the exemption out of each user's
+# ~/.gitconfig.
+git config --system --replace-all safe.directory "$ADMIN_HOME/lustre-test-vms"
+git config --system --add safe.directory "$REPO_DIR"
+git config --system --add safe.directory /opt/lustre-release-reference
+echo "added safe.directory entries to /etc/gitconfig"
+
 # --- reference Lustre checkout -------------------------------------------
 # Cloning lustre-release is minutes of network+CPU; attendees don't need
 # to wait for that on first login.  Clone once into /opt and have
