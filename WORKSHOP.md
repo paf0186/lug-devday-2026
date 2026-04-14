@@ -4,10 +4,18 @@ GCP project: `ltvm-workshop-playground` (us-central1)
 
 ## VMs
 
-| Name    | Role               | Type           | vCPU | RAM     | Disk   | Zone          | Public IP             |
-|---------|--------------------|----------------|------|---------|--------|---------------|-----------------------|
-| host1-f | live workshop host | n2-standard-64 | 64   | 256 GiB | 512 GB | us-central1-f | reserved IP #1 (live) |
-| —       | cold spare         | —              | —    | —       | —      | us-central1-? | reserved IP #2        |
+| Name    | Role                | Type           | vCPU | RAM    | Disk                  | Zone          | Public IP             |
+|---------|---------------------|----------------|------|--------|-----------------------|---------------|-----------------------|
+| host1-f | prep host (current) | n2-standard-16 | 16   | 64 GiB | 32 GB pd-balanced     | us-central1-f | reserved IP #1 (live) |
+| host1   | workshop-day host   | n2-standard-64 | 64   | 256GiB | 200+ GB pd-ssd        | us-central1-? | reserved IP #1 (live) |
+| —       | cold spare          | —              | —    | —      | —                     | us-central1-? | reserved IP #2        |
+
+`host1-f` is the cheap prep-work instance kept running between now
+and the workshop.  On the day, snapshot it and restore onto a
+freshly-created `host1` with pd-ssd (~30× the IOPS of pd-balanced
+and fully snapshottable, unlike local SSD).  Disk type is chosen
+at disk-create time, so the same snapshot can restore onto any
+type -- no lock-in.
 
 > The `-f` suffix is a GCP instance-name artifact from a 2026-04-14
 > zone migration (see **Capacity notes**).  The VM's internal hostname
@@ -137,20 +145,56 @@ the hard way:
 
 ## Provisioning the workshop host
 
-The workflow is **hand-configure once, optionally snapshot for DR**:
+The workflow is **hand-configure once, snapshot regularly,
+restore-onto-pd-ssd for the workshop**:
 
-1. Spin up `host1` from a stock Rocky 9 GCP image (n2-standard-64),
-   attach reserved IP #1
-2. Hand-configure it (admin user, `/etc/lab-passphrase`, `create-account`
-   in `/usr/local/bin/`, ltvm install, `ltvm fetch rocky9`, agent config
-   in `/etc/skel`).  See the bd issues in this repo (`bd ready`) for the
-   punch list.
-3. **Optional but strongly recommended**: snapshot the disk once the
-   host is fully configured.  `gcloud compute images create
-   devday-workshop-vN --source-disk=host1`.  This is the disaster
-   recovery path — if the host dies mid-workshop, you can spin up a
-   replacement from the image in minutes instead of re-doing the
-   manual config.
+### Prep phase (now through workshop-prep)
 
-No scripted bootstrap.  The snapshot is for recovery, not for
-multi-host deploy (there's only one host).
+1. `host1-f` is the running prep instance (n2-standard-16,
+   us-central1-f, pd-balanced).  All config lands here.
+2. Hand-configure via `sudo bash bin/install-host` in the devday
+   repo.  See the bd issues (`bd ready`) for the full punch list.
+3. Snapshot whenever you hit a milestone so workshop-day restore
+   always starts from a fresh-enough state:
+
+   ```bash
+   gcloud compute disks snapshot host1-boot-f \
+       --zone=us-central1-f \
+       --snapshot-names=devday-host-vN
+   ```
+
+### Workshop day — build the real host from a snapshot
+
+```bash
+# Pick a zone with n2-standard-64 capacity (probe first!).  Snapshots
+# are global, so this works even if the prep zone is out of capacity.
+ZONE=us-central1-a
+
+# pd-ssd boot disk from the latest prep snapshot -- same config,
+# ~30x the IOPS of pd-balanced, fully snapshottable.
+gcloud compute disks create host1-boot \
+    --zone=$ZONE \
+    --source-snapshot=devday-host-vN \
+    --type=pd-ssd --size=200GB
+
+# Detach reserved IP from host1-f before attaching it to host1.
+gcloud compute instances delete-access-config host1-f \
+    --zone=us-central1-f --access-config-name="External NAT"
+
+# Create the workshop instance.  enable-nested-virtualization MUST
+# be at create time (see Capacity notes).
+gcloud compute instances create host1 \
+    --zone=$ZONE \
+    --machine-type=n2-standard-64 \
+    --enable-nested-virtualization \
+    --disk=name=host1-boot,boot=yes,auto-delete=yes \
+    --network-interface=address=34.61.47.200,network-tier=PREMIUM
+```
+
+Teardown after the workshop is a single `gcloud compute instances
+delete host1 --zone=$ZONE`.  Reserved IPs, DNS, and the `host1-f`
+prep instance all stay -- next workshop repeats this recipe from
+a newer snapshot.
+
+No scripted bootstrap.  The snapshot is the artifact that makes
+the recipe a 5-minute operation instead of a 2-hour one.
