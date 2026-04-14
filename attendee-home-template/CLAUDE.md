@@ -152,7 +152,8 @@ Rules:
 `ltvm --help` and `ltvm <cmd> --help` cover the rest.
 
 **Organizer-only commands:** `build-container`, `build-kernel`,
-`build-image`, `build-all`, `fetch`.  These write to the shared
-artifact cache under `~admin/lustre-test-vms/output/` and would race
-if two attendees ran them at once.  The cache is pre-populated before
-the workshop -- you only need `build-lustre` plus the VM commands.
+`build-image`, `build-all`, `fetch`, `update`.  These write to the
+shared artifact cache under `~admin/lustre-test-vms/output/` (or to
+the ltvm checkout itself, for `update`) and would race if two
+attendees ran them at once.  The cache is pre-populated before the
+workshop -- you only need `build-lustre` plus the VM commands.
