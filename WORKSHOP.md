@@ -6,16 +6,37 @@ GCP project: `ltvm-workshop-playground` (us-central1)
 
 | Name    | Role                | Type           | vCPU | RAM    | Disk                  | Zone          | Public IP             |
 |---------|---------------------|----------------|------|--------|-----------------------|---------------|-----------------------|
-| host1-f | prep host (current) | n2-standard-16 | 16   | 64 GiB | 32 GB pd-balanced     | us-central1-f | reserved IP #1 (live) |
+| host1-f | prep host (current) | n2-standard-16 | 16   | 64 GiB | 200 GB pd-ssd         | us-central1-f | reserved IP #1 (live) |
 | host1   | workshop-day host   | n2-standard-64 | 64   | 256GiB | 200+ GB pd-ssd        | us-central1-? | reserved IP #1 (live) |
 | —       | cold spare          | —              | —    | —      | —                     | us-central1-? | reserved IP #2        |
 
-`host1-f` is the cheap prep-work instance kept running between now
-and the workshop.  On the day, snapshot it and restore onto a
-freshly-created `host1` with pd-ssd (~30× the IOPS of pd-balanced
-and fully snapshottable, unlike local SSD).  Disk type is chosen
-at disk-create time, so the same snapshot can restore onto any
-type -- no lock-in.
+`host1-f` is the prep-work instance kept running between now and
+the workshop; already on pd-ssd so benchmarking and test iteration
+match workshop-day performance.  On the day, snapshot it and restore
+onto a fresh `host1` (also pd-ssd) right-sized to n2-standard-64.
+Disk type is chosen at disk-create time, so the same snapshot can
+restore onto any type -- no lock-in.
+
+### Changing disk type later (notes-to-self)
+
+You can't mutate a disk's type in place.  To move pd-balanced →
+pd-ssd (or similar), it's:
+
+```bash
+gcloud compute instances stop host1-f --zone=us-central1-f
+gcloud compute disks snapshot host1-boot-f --zone=us-central1-f \
+    --snapshot-names=host1-swap
+gcloud compute disks create host1-boot-f-ssd --zone=us-central1-f \
+    --source-snapshot=host1-swap --type=pd-ssd --size=200GB
+gcloud compute instances detach-disk host1-f --zone=us-central1-f \
+    --disk=host1-boot-f
+gcloud compute instances attach-disk host1-f --zone=us-central1-f \
+    --disk=host1-boot-f-ssd --boot
+gcloud compute instances start host1-f --zone=us-central1-f
+# verify, then:
+gcloud compute disks delete host1-boot-f --zone=us-central1-f --quiet
+gcloud compute snapshots delete host1-swap --quiet
+```
 
 > The `-f` suffix is a GCP instance-name artifact from a 2026-04-14
 > zone migration (see **Capacity notes**).  The VM's internal hostname
