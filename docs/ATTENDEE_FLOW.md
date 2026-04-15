@@ -151,9 +151,9 @@ your modified Lustre against the test kernel, then deploy to a fresh
 microVM:
 
 ```sh
-sudo ltvm build-lustre rocky9 ~/lustre-release
-sudo ltvm create co1-test --os rocky9 --mdt-disks 1 --ost-disks 2
-sudo ltvm deploy co1-test --build ~/lustre-release --mount
+sudo ltvm build lustre rocky9 ~/lustre-release
+sudo ltvm create co1-test --target rocky9 --mdt-disks 1 --ost-disks 2
+sudo ltvm deploy-lustre co1-test --build ~/lustre-release --mount
 ssh root@co1-test 'lctl dl'
 ```
 

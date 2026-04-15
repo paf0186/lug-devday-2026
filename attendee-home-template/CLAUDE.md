@@ -15,11 +15,11 @@ Lustre developer work through hands-on exercises.
 
 ```sh
 # Build Lustre
-ltvm build-lustre rocky9 ~/lustre-release
+ltvm build lustre rocky9 ~/lustre-release
 
 # Create + deploy + mount a VM (naming: co1-<role>, use checkout N)
-sudo ltvm ensure co1-single --vcpus 2 --mem 4096 --mdt-disks 1 --ost-disks 3
-sudo ltvm deploy co1-single --build ~/lustre-release --mount
+sudo ltvm create co1-single --vcpus 2 --mem 4096 --mdt-disks 1 --ost-disks 3
+sudo ltvm deploy-lustre co1-single --build ~/lustre-release --mount
 ssh root@co1-single 'lfs df -h /mnt/lustre'
 ```
 
@@ -28,7 +28,7 @@ ssh root@co1-single 'lfs df -h /mnt/lustre'
 ```sh
 ssh root@co1-single              # interactive shell (VM name resolves via dnsmasq)
 ssh root@co1-single 'lctl dl'    # one-shot command
-ltvm console-log co1-single      # serial console output (through QEMU, not ssh)
+ltvm vm console-log co1-single   # serial console output (through QEMU, not ssh)
 ```
 
 VMs share a host-local bridge (`192.168.100.0/24`) and can `ssh`
@@ -37,8 +37,8 @@ each other by name — handy for multi-node cluster exercises.
 ## Panic + crashdump
 
 ```sh
-sudo ltvm nmi co1-single                            # inject NMI → panic + kdump
-sudo ltvm crash-collect co1-single --mod-dir ~/lustre-release
+sudo ltvm vm nmi co1-single                             # inject NMI → panic + kdump
+sudo ltvm vm crash-collect co1-single --mod-dir ~/lustre-release
 ```
 
 `crash-collect` waits for kdump to finish, pulls the vmcore back to
@@ -66,18 +66,18 @@ you want on first contact with an unfamiliar crash.
 
 ```sh
 # 1. Build + deploy Lustre to a running VM
-ltvm build-lustre rocky9 ~/lustre-release
-sudo ltvm deploy co1-single --build ~/lustre-release --mount
+ltvm build lustre rocky9 ~/lustre-release
+sudo ltvm deploy-lustre co1-single --build ~/lustre-release --mount
 
 # 2. Panic the VM (or reproduce the bug you're chasing)
-sudo ltvm nmi co1-single
+sudo ltvm vm nmi co1-single
 
 # 3. Wait for kdump + reboot, pull vmcore, run triage.
 #    --mod-dir points at your Lustre tree so triage can resolve
 #    Lustre symbols (mdc_*, osc_*, ldlm_*); without it you only
 #    get kernel symbols.  ltvm auto-resolves vmlinux from the
 #    target's build output.
-sudo ltvm crash-collect co1-single --mod-dir ~/lustre-release
+sudo ltvm vm crash-collect co1-single --mod-dir ~/lustre-release
 # → /tmp/crashes/crash-co1-single-<ts>/vmcore  +  triage JSON on stdout
 ```
 
@@ -151,9 +151,11 @@ Rules:
 
 `ltvm --help` and `ltvm <cmd> --help` cover the rest.
 
-**Organizer-only commands:** `build-container`, `build-kernel`,
-`build-image`, `build-all`, `fetch`, `update`.  These write to the
-shared artifact cache under `~admin/lustre-test-vms/output/` (or to
-the ltvm checkout itself, for `update`) and would race if two
-attendees ran them at once.  The cache is pre-populated before the
-workshop -- you only need `build-lustre` plus the VM commands.
+**Organizer-only commands:** everything under `ltvm build` except
+`build lustre` (i.e. `build container/kernel/image/all`), plus
+`ltvm target fetch/clean/package/publish` and `ltvm update`.
+These write to the shared artifact cache under
+`~admin/lustre-test-vms/output/` (or to the ltvm checkout itself,
+for `update`) and would race if two attendees ran them at once.
+The cache is pre-populated before the workshop -- you only need
+`ltvm build lustre` plus the VM commands.
